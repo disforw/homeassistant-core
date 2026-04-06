@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from homeassistant.components.update import UpdateEntity
+from homeassistant.components.update import UpdateDeviceClass, UpdateEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -29,7 +29,7 @@ class QNAPFirmwareUpdateEntity(CoordinatorEntity[QnapCoordinator], UpdateEntity)
     """Update entity for QNAP NAS firmware."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "firmware_update"
+    _attr_device_class = UpdateDeviceClass.FIRMWARE
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator: QnapCoordinator, unique_id: str) -> None:
