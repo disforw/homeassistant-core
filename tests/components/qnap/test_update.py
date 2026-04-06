@@ -1,4 +1,4 @@
-"""Tests for QNAP sensor platform."""
+"""Tests for QNAP update platform."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ from homeassistant.const import (
     CONF_TIMEOUT,
     CONF_USERNAME,
     CONF_VERIFY_SSL,
-    STATE_UNAVAILABLE,
-    STATE_UNKNOWN,
+    STATE_OFF,
+    STATE_ON,
 )
 from homeassistant.core import HomeAssistant
 
@@ -31,6 +31,7 @@ from tests.common import MockConfigEntry
 
 TEST_NAS_NAME = "Test NAS"
 TEST_SERIAL = "QX1234567"
+INSTALLED_VERSION = "5.1.0.2548"
 
 ENTRY_DATA = {
     CONF_HOST: "1.2.3.4",
@@ -43,10 +44,7 @@ ENTRY_DATA = {
 }
 
 
-def _make_system_stats(
-    nic_name: str = "eth0",
-    drive_name: str = "HDD 1",
-) -> dict[str, Any]:
+def _make_system_stats() -> dict[str, Any]:
     """Return a minimal but complete system_stats payload."""
     return {
         "system": {
@@ -64,12 +62,12 @@ def _make_system_stats(
             "free": 4096,
         },
         "firmware": {
-            "version": "5.1.0.2548",
+            "version": INSTALLED_VERSION,
             "build": "20230101",
             "patch": "0",
         },
         "nics": {
-            nic_name: {
+            "eth0": {
                 "link_status": "Up",
                 "max_speed": 1000,
                 "err_packets": 0,
@@ -88,25 +86,16 @@ def _make_system_stats(
 
 
 def _make_coordinator_data(
-    *,
     firmware_update: str | None = None,
-    nic_name: str = "eth0",
-    drive_name: str = "HDD 1",
-    drive_temp_c: int | None = 35,
-    include_bandwidth: bool = True,
 ) -> dict[str, Any]:
-    """Build a full coordinator data dict for testing."""
-    bandwidth: dict[str, Any] = {}
-    if include_bandwidth:
-        bandwidth[nic_name] = {"tx": 1000, "rx": 2000}
-
+    """Build a minimal coordinator data dict for update entity testing."""
     return {
-        "system_stats": _make_system_stats(nic_name=nic_name, drive_name=drive_name),
+        "system_stats": _make_system_stats(),
         "system_health": "OK",
         "smart_drive_health": {
-            drive_name: {
+            "HDD 1": {
                 "health": "good",
-                "temp_c": drive_temp_c,
+                "temp_c": 35,
                 "drive_number": "0",
                 "model": "TOSHIBA HDWD110",
                 "serial": "X8ABC12345",
@@ -119,7 +108,7 @@ def _make_coordinator_data(
                 "total_size": 1000000000000,
             }
         },
-        "bandwidth": bandwidth,
+        "bandwidth": {"eth0": {"tx": 1000, "rx": 2000}},
         "firmware_update": firmware_update,
     }
 
@@ -158,82 +147,51 @@ async def _setup_integration(
 
 
 # ---------------------------------------------------------------------------
-# Drive temperature sensor
+# Update entity — no update available
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("entity_registry_enabled_by_default")
-async def test_drive_temp_sensor_none_returns_unknown(hass: HomeAssistant) -> None:
-    """Drive temp sensor must return None (unknown), NOT 0, when temp_c is None."""
-    data = _make_coordinator_data(drive_temp_c=None)
+async def test_firmware_update_entity_no_update(hass: HomeAssistant) -> None:
+    """Update entity state is OFF when get_firmware_update() returns None."""
+    data = _make_coordinator_data(firmware_update=None)
     await _setup_integration(hass, data)
 
-    # Entity ID: device "Test NAS" + entity name "Drive HDD 1 temperature"
-    state = hass.states.get("sensor.test_nas_drive_hdd_1_temperature")
+    state = hass.states.get("update.test_nas_firmware_update")
     assert state is not None
-    assert state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE), (
-        f"Expected unknown/unavailable for None temp, got: {state.state!r}"
-    )
-    assert state.state != "0", "drive_temp must not return 0 when temp_c is None"
+    assert state.state == STATE_OFF
+
+
+# ---------------------------------------------------------------------------
+# Update entity — update available
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("entity_registry_enabled_by_default")
-async def test_drive_temp_sensor_with_value(hass: HomeAssistant) -> None:
-    """Drive temp sensor returns the integer temperature when temp_c is set."""
-    data = _make_coordinator_data(drive_temp_c=38)
+async def test_firmware_update_entity_update_available(hass: HomeAssistant) -> None:
+    """Update entity state is ON when a newer firmware version is available."""
+    latest = "5.2.0.1234 Build 20240101"
+    data = _make_coordinator_data(firmware_update=latest)
     await _setup_integration(hass, data)
 
-    state = hass.states.get("sensor.test_nas_drive_hdd_1_temperature")
+    state = hass.states.get("update.test_nas_firmware_update")
     assert state is not None
-    assert state.state == "38"
+    assert state.state == STATE_ON
+    assert state.attributes["installed_version"] == INSTALLED_VERSION
+    assert state.attributes["latest_version"] == latest
 
 
 # ---------------------------------------------------------------------------
-# Network bandwidth sensors
+# Update entity — installed_version reflects coordinator firmware version
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.usefixtures("entity_registry_enabled_by_default")
-async def test_network_sensor_nic_missing_from_bandwidth(hass: HomeAssistant) -> None:
-    """Network tx/rx sensors return None (not KeyError) when NIC absent from bandwidth."""
-    # NIC "eth0" is in system_stats/nics, but NOT in bandwidth data
-    data = _make_coordinator_data(nic_name="eth0", include_bandwidth=False)
+async def test_firmware_update_entity_installed_version(hass: HomeAssistant) -> None:
+    """installed_version attribute reflects the firmware version from system_stats."""
+    data = _make_coordinator_data(firmware_update=None)
     await _setup_integration(hass, data)
 
-    tx_state = hass.states.get("sensor.test_nas_eth0_upload")
-    rx_state = hass.states.get("sensor.test_nas_eth0_download")
-
-    assert tx_state is not None, "network_tx sensor entity should exist"
-    assert tx_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE), (
-        f"Expected unknown/unavailable for missing bandwidth, got tx={tx_state.state!r}"
-    )
-
-    assert rx_state is not None, "network_rx sensor entity should exist"
-    assert rx_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE), (
-        f"Expected unknown/unavailable for missing bandwidth, got rx={rx_state.state!r}"
-    )
-
-
-@pytest.mark.usefixtures("entity_registry_enabled_by_default")
-async def test_network_sensor_nic_in_bandwidth(hass: HomeAssistant) -> None:
-    """Network tx/rx sensors return a valid value when NIC is present in bandwidth."""
-    # bandwidth: eth0 = {tx: 1000, rx: 2000} bits/sec
-    # The sensor uses UnitOfDataRate.BITS_PER_SECOND natively but
-    # suggested_unit_of_measurement=MEGABITS_PER_SECOND, so HA auto-converts
-    # the display value. We just assert a valid (non-unavailable) state is
-    # returned rather than a specific converted string.
-    data = _make_coordinator_data(nic_name="eth0", include_bandwidth=True)
-    await _setup_integration(hass, data)
-
-    tx_state = hass.states.get("sensor.test_nas_eth0_upload")
-    rx_state = hass.states.get("sensor.test_nas_eth0_download")
-
-    assert tx_state is not None
-    assert tx_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN), (
-        f"Expected a valid bandwidth value for tx, got: {tx_state.state!r}"
-    )
-
-    assert rx_state is not None
-    assert rx_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN), (
-        f"Expected a valid bandwidth value for rx, got: {rx_state.state!r}"
-    )
+    state = hass.states.get("update.test_nas_firmware_update")
+    assert state is not None
+    assert state.attributes["installed_version"] == INSTALLED_VERSION

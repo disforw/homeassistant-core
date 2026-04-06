@@ -61,12 +61,6 @@ _SYSTEM_MON_COND: tuple[SensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
-    SensorEntityDescription(
-        key="firmware_update",
-        translation_key="firmware_update",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
-    ),
 )
 _CPU_MON_COND: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
@@ -428,9 +422,6 @@ class QNAPSystemSensor(QNAPSensor):
                 seconds=uptime["seconds"],
             )
             return dt_util.now() - uptime_duration
-
-        if self.entity_description.key == "firmware_update":
-            return self.coordinator.data.get("firmware_update")
 
         return None
 
