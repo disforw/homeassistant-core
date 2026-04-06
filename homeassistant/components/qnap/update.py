@@ -54,11 +54,12 @@ class QNAPFirmwareUpdateEntity(CoordinatorEntity[QnapCoordinator], UpdateEntity)
     def latest_version(self) -> str | None:
         """Return the latest available firmware version.
 
-        Returns None when no update information is available (treated as
-        up-to-date by Home Assistant). Returns the version string when a
-        firmware update is available.
+        Returns None when no update information is available or the
+        coordinator reports an error state (treated as up-to-date by Home
+        Assistant). Returns the version string when a firmware update is
+        available.
         """
         available: str | None = self.coordinator.data.get("firmware_update")
-        if not available:
+        if not available or available == "error":
             return None
         return available
