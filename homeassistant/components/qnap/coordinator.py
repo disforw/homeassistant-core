@@ -85,6 +85,7 @@ class QnapCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any]]]):
                 "smart_drive_health": self._api.get_smart_disk_health(),
                 "volumes": self._api.get_volumes(),
                 "bandwidth": self._api.get_bandwidth(),
+                "firmware_update": self._api.get_firmware_update(),
             }
 
     async def _async_update_data(self) -> dict[str, dict[str, Any]]:

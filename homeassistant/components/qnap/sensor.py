@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -58,6 +58,12 @@ _SYSTEM_MON_COND: tuple[SensorEntityDescription, ...] = (
         key="uptime",
         translation_key="uptime",
         device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
+    SensorEntityDescription(
+        key="firmware_update",
+        translation_key="firmware_update",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
@@ -336,7 +342,7 @@ class QNAPCPUSensor(QNAPSensor):
     """A QNAP sensor that monitors CPU stats."""
 
     @property
-    def native_value(self):
+    def native_value(self) -> int | float | None:
         """Return the state of the sensor."""
         if self.entity_description.key == "cpu_temp":
             return self.coordinator.data["system_stats"]["cpu"]["temp_c"]
@@ -350,7 +356,7 @@ class QNAPMemorySensor(QNAPSensor):
     """A QNAP sensor that monitors memory stats."""
 
     @property
-    def native_value(self):
+    def native_value(self) -> float | None:
         """Return the state of the sensor."""
         free = float(self.coordinator.data["system_stats"]["memory"]["free"])
         if self.entity_description.key == "memory_free":
@@ -376,7 +382,7 @@ class QNAPNetworkSensor(QNAPSensor):
     monitor_device: str
 
     @property
-    def native_value(self):
+    def native_value(self) -> int | float | str | None:
         """Return the state of the sensor."""
         nic = self.coordinator.data["system_stats"]["nics"][self.monitor_device]
         if self.entity_description.key == "network_link_status":
@@ -387,6 +393,9 @@ class QNAPNetworkSensor(QNAPSensor):
 
         if self.entity_description.key == "network_err":
             return nic["err_packets"]
+
+        if self.monitor_device not in self.coordinator.data.get("bandwidth", {}):
+            return None
 
         data = self.coordinator.data["bandwidth"][self.monitor_device]
         if self.entity_description.key == "network_tx":
@@ -402,7 +411,7 @@ class QNAPSystemSensor(QNAPSensor):
     """A QNAP sensor that monitors overall system health."""
 
     @property
-    def native_value(self):
+    def native_value(self) -> datetime | int | str | None:
         """Return the state of the sensor."""
         if self.entity_description.key == "status":
             return self.coordinator.data["system_health"]
@@ -420,6 +429,9 @@ class QNAPSystemSensor(QNAPSensor):
             )
             return dt_util.now() - uptime_duration
 
+        if self.entity_description.key == "firmware_update":
+            return self.coordinator.data.get("firmware_update")
+
         return None
 
 
@@ -429,7 +441,7 @@ class QNAPDriveSensor(QNAPSensor):
     monitor_device: str
 
     @property
-    def native_value(self):
+    def native_value(self) -> int | str | None:
         """Return the state of the sensor."""
         data = self.coordinator.data["smart_drive_health"][self.monitor_device]
 
@@ -437,7 +449,7 @@ class QNAPDriveSensor(QNAPSensor):
             return data["health"]
 
         if self.entity_description.key == "drive_temp":
-            return int(data["temp_c"]) if data["temp_c"] is not None else 0
+            return int(data["temp_c"]) if data["temp_c"] is not None else None
 
         return None
 
@@ -461,7 +473,7 @@ class QNAPVolumeSensor(QNAPSensor):
     monitor_device: str
 
     @property
-    def native_value(self):
+    def native_value(self) -> int | float | None:
         """Return the state of the sensor."""
         data = self.coordinator.data["volumes"][self.monitor_device]
 

@@ -57,6 +57,9 @@
       "drive_temp": {
         "name": "Drive {monitor_device} temperature"
       },
+      "firmware_update": {
+        "name": "Firmware update"
+      },
       "memory_free": {
         "name": "Memory available"
       },
@@ -100,7 +103,7 @@
         "name": "Free space ({monitor_device})"
       },
       "volume_size_total": {
-        "name": "Volume size"
+        "name": "Volume size ({monitor_device})"
       },
       "volume_size_used": {
         "name": "Used space ({monitor_device})"
