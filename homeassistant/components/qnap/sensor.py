@@ -440,7 +440,7 @@ class QNAPDriveSensor(QNAPSensor):
             return data["health"]
 
         if self.entity_description.key == "drive_temp":
-            return int(data["temp_c"]) if data["temp_c"] is not None else 0
+            return int(data["temp_c"]) if data["temp_c"] is not None else None
 
         return None
 
